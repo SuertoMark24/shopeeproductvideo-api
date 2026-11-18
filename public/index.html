@@ -25,7 +25,7 @@
   .tbl th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
     text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
   .tbl td { padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .c-vid { width: 64px; } .c-link { width: 72px; } .c-save { width: 60px; }
+  .c-vid { width: 64px; } .c-link { width: 76px; } .c-save { width: 52px; }
   .thumb { position: relative; width: 56px; height: 84px; border-radius: 8px; overflow: hidden; background: #000;
     border: 0; padding: 0; cursor: pointer; display: block; }
   .thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; display: block; }
@@ -42,6 +42,9 @@
   .pill.primary { background: var(--accent); color: var(--accent-ink); }
   .pill.done { background: var(--ok); color: #0b1a17; }
   .pill.danger { background: #3a1d1d; color: #ff8a80; }
+  .pill.ok { background: #16a34a; color: #fff; }
+  tr.is-done td { background: rgba(22,163,74,.10); }
+  .thumb + .pill { width: 56px; }
   .pill:disabled { opacity: .5; }
   .pill:active { transform: scale(.97); }
 
@@ -96,6 +99,28 @@ async function copy(text, btn) {
     if (btn) { const old = btn.textContent; btn.classList.add('done'); btn.textContent = 'Copied ✓';
       setTimeout(() => { btn.classList.remove('done'); btn.textContent = old; }, 1500); }
   } else toast('Long-press the text to copy');
+}
+
+// Done = "posted on Shopee". Toggles; saved on the site so it survives refreshes and other devices.
+async function markDone(item, btn) {
+  const next = !item.done;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-passphrase': memPass },
+      body: JSON.stringify({ action: 'done', id: item.id, done: next }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    item.done = next;
+    btn.classList.toggle('ok', next);
+    btn.textContent = next ? 'Done ✓' : 'Done';
+    btn.closest('tr').classList.toggle('is-done', next);
+    toast(next ? 'Marked done ✓' : 'Unmarked');
+  } catch (e) {
+    toast('Could not save: ' + e.message);
+  }
+  btn.disabled = false;
 }
 
 async function del(item, btn) {
@@ -161,8 +186,11 @@ async function load() {
 function render(max) {
   // #t=0.1 makes iOS/Android paint the first frame as a thumbnail without playing.
   const rows = items.map((it, i) => `
-    <tr>
-      <td><button class="thumb" data-play="${i}" aria-label="Play"><video src="${esc(it.videoUrl)}#t=0.1" muted playsinline preload="metadata"></video></button></td>
+    <tr class="${it.done ? 'is-done' : ''}">
+      <td>
+        <button class="thumb" data-play="${i}" aria-label="Play"><video src="${esc(it.videoUrl)}#t=0.1" muted playsinline preload="metadata"></video></button>
+        <a class="pill primary" href="${esc(it.downloadUrl || it.videoUrl)}" download aria-label="Download">⬇</a>
+      </td>
       <td>
         ${it.title ? `<div class="ttl">${esc(it.title)}</div>` : ''}
         ${it.caption ? `<div class="cap">${esc(it.caption)}</div>` : '<div class="none">(no caption)</div>'}
@@ -173,9 +201,9 @@ function render(max) {
           ? `<button class="pill" data-copy-url="${i}">Copy</button>
              <a class="pill" href="${esc(it.shopeeUrl)}" target="_blank" rel="noopener">Open</a>`
           : '<div class="none">—</div>'}
+        <button class="pill ${it.done ? 'ok' : ''}" data-done="${i}">${it.done ? 'Done ✓' : 'Done'}</button>
       </td>
       <td>
-        <a class="pill primary" href="${esc(it.downloadUrl || it.videoUrl)}" download>⬇</a>
         <button class="pill danger" data-del="${i}" aria-label="Delete">🗑</button>
       </td>
     </tr>`).join('');
@@ -186,12 +214,13 @@ function render(max) {
     <main>${rows ? `
       <table class="tbl">
         <colgroup><col class="c-vid"><col><col class="c-link"><col class="c-save"></colgroup>
-        <thead><tr><th>Video</th><th>Caption</th><th>Link</th><th>Save</th></tr></thead>
+        <thead><tr><th>Video</th><th>Caption</th><th>Link</th><th>Delete</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="empty">No videos yet. Add them from Stitchify.</div>'}</main>`;
 
   document.getElementById('refresh').onclick = load;
   document.getElementById('out').onclick = () => { memPass = ''; setPass(''); login(); };
+  app.querySelectorAll('[data-done]').forEach((b) => b.onclick = () => markDone(items[b.dataset.done], b));
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => del(items[b.dataset.del], b));
   app.querySelectorAll('[data-play]').forEach((b) => b.onclick = () => openViewer(items[b.dataset.play]));
   app.querySelectorAll('[data-copy-caption]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyCaption].caption || '', b));

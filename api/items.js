@@ -5,7 +5,8 @@ import { readItems, writeItem, deleteUrls, orphanVideos, publicItem, validId, MA
 // POST /api/items   (x-sync-token; "delete" also accepts x-passphrase)
 //   { action: "add",    id, title, caption, shopeeUrl, videoUrl, downloadUrl, sizeBytes }
 //   { action: "update", id, title?, caption?, shopeeUrl? }
-//   { action: "delete", id }
+//   { action: "done",   id, done: true|false }   (also x-passphrase)
+//   { action: "delete", id }                     (also x-passphrase)
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -17,8 +18,8 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
   const b = body(req);
-  // The phone (passphrase) may delete a video it has posted; add/update stay Stitchify-only.
-  const allowed = b.action === 'delete' ? isViewer(req) : isSync(req);
+  // The phone (passphrase) may mark a video done or delete it; add/update stay Stitchify-only.
+  const allowed = b.action === 'delete' || b.action === 'done' ? isViewer(req) : isSync(req);
   if (!allowed) return res.status(401).json({ error: 'bad_token' });
 
   if (!validId(b.id)) return res.status(400).json({ error: 'bad_id' });
@@ -50,6 +51,12 @@ export default async function handler(req, res) {
       caption: b.caption ?? existing.caption,
       shopeeUrl: b.shopeeUrl ?? existing.shopeeUrl,
     });
+    await deleteUrls([existing._url]);
+    return res.status(200).json({ ok: true, item });
+  }
+
+  if (b.action === 'done') {
+    const item = await writeItem({ ...existing, done: Boolean(b.done) });
     await deleteUrls([existing._url]);
     return res.status(200).json({ ok: true, item });
   }
