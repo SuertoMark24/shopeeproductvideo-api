@@ -1,0 +1,10 @@
+{
+  "name": "shopeeproductvideo-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile hand-off for Shopee posting: Stitchify syncs videos + Shopee caption + product link here (Vercel + Vercel Blob)",
+  "dependencies": {
+    "@vercel/blob": "^2.9.0"
+  }
+}
