@@ -96,39 +96,17 @@ async function copy(text, btn) {
   } else toast('Long-press the text to copy');
 }
 
-// Share sheet with the actual file (iOS: "Save Video" to Photos). Falls back to a normal download.
-async function save(item, btn) {
-  const label = btn.textContent;
-  if (navigator.canShare && window.File) {
-    try {
-      btn.textContent = '…';
-      const r = await fetch(item.videoUrl);
-      const blob = await r.blob();
-      const file = new File([blob], (item.title || 'video').replace(/[^\w\- ]+/g, '').slice(0, 60) + '.mp4', { type: 'video/mp4' });
-      if (navigator.canShare({ files: [file] })) {
-        btn.textContent = label;
-        await navigator.share({ files: [file] });
-        return;
-      }
-    } catch (e) { if (e && e.name === 'AbortError') { btn.textContent = label; return; } }
-    btn.textContent = label;
-  }
-  location.href = item.downloadUrl || item.videoUrl;
-}
-
 function openViewer(item) {
   const v = document.getElementById('viewer');
   v.innerHTML = `
     <video src="${esc(item.videoUrl)}" controls autoplay playsinline></video>
     <div class="bar">
       <a class="pill primary" href="${esc(item.downloadUrl || item.videoUrl)}" download>Download</a>
-      <button class="pill" id="v-share">Share</button>
       <button class="pill" id="v-close">Close</button>
     </div>`;
   v.classList.add('open');
   const close = () => { v.classList.remove('open'); v.innerHTML = ''; };
   document.getElementById('v-close').onclick = close;
-  document.getElementById('v-share').onclick = (e) => save(item, e.currentTarget);
   v.onclick = (e) => { if (e.target === v) close(); };
 }
 
@@ -178,7 +156,6 @@ function render(max) {
       </td>
       <td>
         <a class="pill primary" href="${esc(it.downloadUrl || it.videoUrl)}" download>⬇</a>
-        <button class="pill" data-save="${i}">Share</button>
       </td>
     </tr>`).join('');
 
@@ -197,7 +174,6 @@ function render(max) {
   app.querySelectorAll('[data-play]').forEach((b) => b.onclick = () => openViewer(items[b.dataset.play]));
   app.querySelectorAll('[data-copy-caption]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyCaption].caption || '', b));
   app.querySelectorAll('[data-copy-url]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyUrl].shopeeUrl || '', b));
-  app.querySelectorAll('[data-save]').forEach((b) => b.onclick = () => save(items[b.dataset.save], b));
 }
 
 load();
