@@ -2,7 +2,7 @@ import { isSync, isViewer, body } from '../lib/auth.js';
 import { readItems, writeItem, deleteUrls, orphanVideos, publicItem, validId, MAX_ITEMS } from '../lib/store.js';
 
 // GET  /api/items   (x-passphrase or x-sync-token) -> { items: [...], max }
-// POST /api/items   (x-sync-token)
+// POST /api/items   (x-sync-token; "delete" also accepts x-passphrase)
 //   { action: "add",    id, title, caption, shopeeUrl, videoUrl, downloadUrl, sizeBytes }
 //   { action: "update", id, title?, caption?, shopeeUrl? }
 //   { action: "delete", id }
@@ -16,9 +16,11 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
-  if (!isSync(req)) return res.status(401).json({ error: 'bad_token' });
-
   const b = body(req);
+  // The phone (passphrase) may delete a video it has posted; add/update stay Stitchify-only.
+  const allowed = b.action === 'delete' ? isViewer(req) : isSync(req);
+  if (!allowed) return res.status(401).json({ error: 'bad_token' });
+
   if (!validId(b.id)) return res.status(400).json({ error: 'bad_id' });
   const items = await readItems();
   const existing = items.find((i) => i.id === b.id);

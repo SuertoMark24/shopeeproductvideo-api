@@ -41,6 +41,8 @@
   .pill:first-child { margin-top: 0; }
   .pill.primary { background: var(--accent); color: var(--accent-ink); }
   .pill.done { background: var(--ok); color: #0b1a17; }
+  .pill.danger { background: #3a1d1d; color: #ff8a80; }
+  .pill:disabled { opacity: .5; }
   .pill:active { transform: scale(.97); }
 
   /* Tap a thumbnail → full player. */
@@ -94,6 +96,24 @@ async function copy(text, btn) {
     if (btn) { const old = btn.textContent; btn.classList.add('done'); btn.textContent = 'Copied ✓';
       setTimeout(() => { btn.classList.remove('done'); btn.textContent = old; }, 1500); }
   } else toast('Long-press the text to copy');
+}
+
+async function del(item, btn) {
+  if (!confirm(`Delete "${item.title || 'this video'}"? This frees a slot and can't be undone.`)) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-passphrase': memPass },
+      body: JSON.stringify({ action: 'delete', id: item.id }),
+    });
+    if (!r.ok) throw new Error(r.status === 401 ? 'Not allowed' : 'HTTP ' + r.status);
+    toast('Deleted ✓');
+    load();
+  } catch (e) {
+    btn.disabled = false;
+    toast('Delete failed: ' + e.message);
+  }
 }
 
 function openViewer(item) {
@@ -156,6 +176,7 @@ function render(max) {
       </td>
       <td>
         <a class="pill primary" href="${esc(it.downloadUrl || it.videoUrl)}" download>⬇</a>
+        <button class="pill danger" data-del="${i}" aria-label="Delete">🗑</button>
       </td>
     </tr>`).join('');
 
@@ -171,6 +192,7 @@ function render(max) {
 
   document.getElementById('refresh').onclick = load;
   document.getElementById('out').onclick = () => { memPass = ''; setPass(''); login(); };
+  app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => del(items[b.dataset.del], b));
   app.querySelectorAll('[data-play]').forEach((b) => b.onclick = () => openViewer(items[b.dataset.play]));
   app.querySelectorAll('[data-copy-caption]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyCaption].caption || '', b));
   app.querySelectorAll('[data-copy-url]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyUrl].shopeeUrl || '', b));
