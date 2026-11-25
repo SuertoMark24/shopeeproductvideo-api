@@ -20,20 +20,35 @@
   header .count { color: var(--muted); font-size: 13px; }
   main { max-width: 720px; margin: 0 auto; padding: 8px 10px 40px; }
 
-  /* Compact table: Video | Caption | Link | Save — one short row per video. */
-  .tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .tbl th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
-    text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
-  .tbl td { padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .c-vid { width: 64px; } .c-link { width: 76px; } .c-save { width: 52px; }
-  .thumb { position: relative; width: 56px; height: 84px; border-radius: 8px; overflow: hidden; background: #000;
+  /* One card per video: preview + caption on top, the 3 big actions (Download / Copy caption / Copy link)
+     right under it, and the rarely-used ones (Open, Done, Delete) small at the bottom. */
+  .list { display: grid; gap: 12px; padding-top: 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .card.is-done { border-color: rgba(22,163,74,.55); background: linear-gradient(0deg, rgba(22,163,74,.08), rgba(22,163,74,.08)), var(--card); }
+  .top { display: flex; gap: 12px; }
+  .top .txt { flex: 1; min-width: 0; }
+  .thumb { position: relative; flex: none; width: 72px; height: 108px; border-radius: 10px; overflow: hidden; background: #000;
     border: 0; padding: 0; cursor: pointer; display: block; }
+  .acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .big { appearance: none; border: 0; border-radius: 12px; min-height: 56px; padding: 8px 4px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    font-size: 13px; font-weight: 700; text-decoration: none; color: var(--text); background: #2a2d33; }
+  .big .ico { font-size: 18px; line-height: 1; }
+  .big.dl { background: var(--accent); color: var(--accent-ink); }
+  .big.cp { background: #24324a; color: #cfe1ff; }
+  .big.done { background: var(--ok); color: #0b1a17; }
+  .big.used { box-shadow: inset 0 0 0 2px var(--ok); }
+  .big:disabled { opacity: .45; cursor: default; }
+  .big:active { transform: scale(.97); }
+  .more { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .more .pill { width: auto; margin: 0; padding: 7px 12px; font-weight: 600; }
+  .more .sp { flex: 1; }
   .thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; display: block; }
   .thumb::after { content: "▶"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff;
     font-size: 16px; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
-  .cap { font-size: 13px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  .cap { font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .ttl { font-size: 11px; color: var(--muted); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ttl { font-size: 12px; color: var(--muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .none { color: var(--muted); font-size: 12px; }
   .pill { display: block; width: 100%; appearance: none; border: 0; border-radius: 8px; padding: 7px 4px; margin-top: 6px;
     font-size: 12px; font-weight: 700; text-align: center; text-decoration: none; cursor: pointer;
@@ -43,8 +58,6 @@
   .pill.done { background: var(--ok); color: #0b1a17; }
   .pill.danger { background: #3a1d1d; color: #ff8a80; }
   .pill.ok { background: #16a34a; color: #fff; }
-  tr.is-done td { background: rgba(22,163,74,.10); }
-  .thumb + .pill { width: 56px; }
   .pill:disabled { opacity: .5; }
   .pill:active { transform: scale(.97); }
 
@@ -96,8 +109,10 @@ async function copy(text, btn) {
   }
   if (ok) {
     toast('Copied ✓');
-    if (btn) { const old = btn.textContent; btn.classList.add('done'); btn.textContent = 'Copied ✓';
-      setTimeout(() => { btn.classList.remove('done'); btn.textContent = old; }, 1500); }
+    // Flash "Copied ✓", then keep a green ring so you can see which steps you've already done.
+    if (btn) { const old = btn.innerHTML; btn.classList.add('done', 'used');
+      btn.innerHTML = '<span class="ico">✓</span>Copied';
+      setTimeout(() => { btn.classList.remove('done'); btn.innerHTML = old; }, 1500); }
   } else toast('Long-press the text to copy');
 }
 
@@ -115,7 +130,7 @@ async function markDone(item, btn) {
     item.done = next;
     btn.classList.toggle('ok', next);
     btn.textContent = next ? 'Done ✓' : 'Done';
-    btn.closest('tr').classList.toggle('is-done', next);
+    btn.closest('.card').classList.toggle('is-done', next);
     toast(next ? 'Marked done ✓' : 'Unmarked');
   } catch (e) {
     toast('Could not save: ' + e.message);
@@ -186,37 +201,32 @@ async function load() {
 function render(max) {
   // #t=0.1 makes iOS/Android paint the first frame as a thumbnail without playing.
   const rows = items.map((it, i) => `
-    <tr class="${it.done ? 'is-done' : ''}">
-      <td>
+    <article class="card ${it.done ? 'is-done' : ''}">
+      <div class="top">
         <button class="thumb" data-play="${i}" aria-label="Play"><video src="${esc(it.videoUrl)}#t=0.1" muted playsinline preload="metadata"></video></button>
-        <a class="pill primary" href="${esc(it.downloadUrl || it.videoUrl)}" download aria-label="Download">⬇</a>
-      </td>
-      <td>
-        ${it.title ? `<div class="ttl">${esc(it.title)}</div>` : ''}
-        ${it.caption ? `<div class="cap">${esc(it.caption)}</div>` : '<div class="none">(no caption)</div>'}
-        ${it.caption ? `<button class="pill" data-copy-caption="${i}" style="width:auto;padding:6px 12px">Copy caption</button>` : ''}
-      </td>
-      <td>
-        ${it.shopeeUrl
-          ? `<button class="pill" data-copy-url="${i}">Copy</button>
-             <a class="pill" href="${esc(it.shopeeUrl)}" target="_blank" rel="noopener">Open</a>`
-          : '<div class="none">—</div>'}
+        <div class="txt">
+          ${it.title ? `<div class="ttl">${esc(it.title)}</div>` : ''}
+          ${it.caption ? `<div class="cap">${esc(it.caption)}</div>` : '<div class="none">(no caption)</div>'}
+        </div>
+      </div>
+      <div class="acts">
+        <a class="big dl" href="${esc(it.downloadUrl || it.videoUrl)}" download data-dl="${i}"><span class="ico">⬇</span>Download</a>
+        <button class="big cp" data-copy-caption="${i}" ${it.caption ? '' : 'disabled'}><span class="ico">📋</span>Caption</button>
+        <button class="big cp" data-copy-url="${i}" ${it.shopeeUrl ? '' : 'disabled'}><span class="ico">🔗</span>Link</button>
+      </div>
+      <div class="more">
+        ${it.shopeeUrl ? `<a class="pill" href="${esc(it.shopeeUrl)}" target="_blank" rel="noopener">Open in Shopee</a>` : ''}
         <button class="pill ${it.done ? 'ok' : ''}" data-done="${i}">${it.done ? 'Done ✓' : 'Done'}</button>
-      </td>
-      <td>
+        <span class="sp"></span>
         <button class="pill danger" data-del="${i}" aria-label="Delete">🗑</button>
-      </td>
-    </tr>`).join('');
+      </div>
+    </article>`).join('');
 
   app.innerHTML = `
     <header><h1>Shopee Videos</h1><span class="count">${items.length} / ${max}</span>
       <button class="link" id="refresh">Refresh</button><button class="link" id="out">Lock</button></header>
     <main>${rows ? `
-      <table class="tbl">
-        <colgroup><col class="c-vid"><col><col class="c-link"><col class="c-save"></colgroup>
-        <thead><tr><th>Video</th><th>Caption</th><th>Link</th><th>Delete</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>` : '<div class="empty">No videos yet. Add them from Stitchify.</div>'}</main>`;
+      <div class="list">${rows}</div>` :'<div class="empty">No videos yet. Add them from Stitchify.</div>'}</main>`;
 
   document.getElementById('refresh').onclick = load;
   document.getElementById('out').onclick = () => { memPass = ''; setPass(''); login(); };
@@ -225,6 +235,7 @@ function render(max) {
   app.querySelectorAll('[data-play]').forEach((b) => b.onclick = () => openViewer(items[b.dataset.play]));
   app.querySelectorAll('[data-copy-caption]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyCaption].caption || '', b));
   app.querySelectorAll('[data-copy-url]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyUrl].shopeeUrl || '', b));
+  app.querySelectorAll('[data-dl]').forEach((b) => b.addEventListener('click', () => { b.classList.add('used'); toast('Downloading…'); }));
 }
 
 load();
