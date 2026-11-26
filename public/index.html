@@ -117,43 +117,24 @@ async function copy(text, btn) {
   } else toast('Long-press the text to copy');
 }
 
-// Done = "posted on Shopee". Toggles; saved on the site so it survives refreshes and other devices.
+// Done = "posted on Shopee": the video leaves this page and goes to Stitchify's "Already uploaded".
 async function markDone(item, btn) {
-  const next = !item.done;
+  if (!confirm(`Posted "${item.title || 'this video'}" on Shopee? It moves to Already uploaded.`)) return;
   btn.disabled = true;
   try {
     const r = await fetch('/api/items', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-passphrase': memPass },
-      body: JSON.stringify({ action: 'done', id: item.id, done: next }),
+      body: JSON.stringify({ action: 'done', id: item.id, done: true }),
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    item.done = next;
-    btn.classList.toggle('ok', next);
-    btn.textContent = next ? 'Done ✓' : 'Done';
-    btn.closest('.card').classList.toggle('is-done', next);
-    toast(next ? 'Marked done ✓' : 'Unmarked');
-  } catch (e) {
-    toast('Could not save: ' + e.message);
-  }
-  btn.disabled = false;
-}
-
-async function del(item, btn) {
-  if (!confirm(`Delete "${item.title || 'this video'}"? This frees a slot and can't be undone.`)) return;
-  btn.disabled = true;
-  try {
-    const r = await fetch('/api/items', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-passphrase': memPass },
-      body: JSON.stringify({ action: 'delete', id: item.id }),
-    });
-    if (!r.ok) throw new Error(r.status === 401 ? 'Not allowed' : 'HTTP ' + r.status);
-    toast('Deleted ✓');
-    load();
+    toast('Done ✓');
+    const card = btn.closest('.card');
+    card.style.transition = 'opacity .25s'; card.style.opacity = '0';
+    setTimeout(load, 250);
   } catch (e) {
     btn.disabled = false;
-    toast('Delete failed: ' + e.message);
+    toast('Could not save: ' + e.message);
   }
 }
 
@@ -195,14 +176,14 @@ async function load() {
   catch { app.innerHTML = '<div class="msg">No connection. Pull down to retry.</div>'; return; }
   if (r.status === 401) { memPass = ''; setPass(''); return login('Wrong passphrase'); }
   const data = await r.json();
-  items = data.items || [];
+  items = (data.items || []).filter((it) => !it.done);   // done ones live in Stitchify's "Already uploaded"
   render(data.max || 10);
 }
 
 function render(max) {
   // #t=0.1 makes iOS/Android paint the first frame as a thumbnail without playing.
   const rows = items.map((it, i) => `
-    <article class="card ${it.done ? 'is-done' : ''}">
+    <article class="card">
       <div class="top">
         <button class="thumb" data-play="${i}" aria-label="Play"><video src="${esc(it.videoUrl)}#t=0.1" muted playsinline preload="metadata"></video></button>
         <div class="txt">
@@ -217,9 +198,8 @@ function render(max) {
       </div>
       <div class="more">
         ${it.shopeeUrl ? `<a class="pill" href="${esc(it.shopeeUrl)}" target="_blank" rel="noopener">Open in Shopee</a>` : ''}
-        <button class="pill ${it.done ? 'ok' : ''}" data-done="${i}">${it.done ? 'Done ✓' : 'Done'}</button>
         <span class="sp"></span>
-        <button class="pill danger" data-del="${i}" aria-label="Delete">🗑</button>
+        <button class="pill ok" data-done="${i}">✓ Done</button>
       </div>
     </article>`).join('');
 
@@ -227,12 +207,11 @@ function render(max) {
     <header><h1>Shopee Videos</h1><span class="count">${items.length} / ${max}</span>
       <button class="link" id="refresh">Refresh</button><button class="link" id="out">Lock</button></header>
     <main>${rows ? `
-      <div class="list">${rows}</div>` :'<div class="empty">No videos yet. Add them from Stitchify.</div>'}</main>`;
+      <div class="list">${rows}</div>` :'<div class="empty">All done 🎉 Nothing waiting to post.</div>'}</main>`;
 
   document.getElementById('refresh').onclick = load;
   document.getElementById('out').onclick = () => { memPass = ''; setPass(''); login(); };
   app.querySelectorAll('[data-done]').forEach((b) => b.onclick = () => markDone(items[b.dataset.done], b));
-  app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => del(items[b.dataset.del], b));
   app.querySelectorAll('[data-play]').forEach((b) => b.onclick = () => openViewer(items[b.dataset.play]));
   app.querySelectorAll('[data-copy-caption]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyCaption].caption || '', b));
   app.querySelectorAll('[data-copy-url]').forEach((b) => b.onclick = () => copy(items[b.dataset.copyUrl].shopeeUrl || '', b));

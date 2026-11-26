@@ -5,8 +5,9 @@ A private, phone-friendly page for posting on Shopee. Stitchify (admin only, **S
 - **Download** the video (or **Save / Share** it to Photos)
 - **Copy caption**
 - **Copy link**, or **Open in Shopee**
+- **Done** once it's posted: the video leaves the phone page and moves to **Already uploaded** in Stitchify
 
-The site holds at most **10 videos**. Delete one in Stitchify to free a slot.
+The phone holds at most **10 videos waiting** to be posted; Done frees the slot. Already-uploaded videos stay in Blob storage until you **Delete** them in Stitchify, which removes the video and its record.
 
 ## One-time setup
 
@@ -29,6 +30,7 @@ All requests use JSON.
 | GET | `/api/items` | `x-sync-token` or `x-passphrase` | List the videos, newest first |
 | POST | `/api/upload-token` | `x-sync-token` | Get `{id, pathname, clientToken}` for a direct Blob upload. Refused when the site is full. |
 | POST | `/api/items` | `x-sync-token` | `{action:"add"\|"update"\|"delete", id, ...}` |
+| POST | `/api/items` | `x-sync-token` or `x-passphrase` | `{action:"done", id, done:true\|false}`: move to / back from Already uploaded |
 
 Videos go straight from Stitchify to Vercel Blob (`PUT https://vercel.com/api/blob/?pathname=…` with the client token), so they aren't limited by Vercel's 4.5 MB request size.
 

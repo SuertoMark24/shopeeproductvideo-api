@@ -1,12 +1,13 @@
 import { isSync, isViewer, body } from '../lib/auth.js';
-import { readItems, writeItem, deleteUrls, orphanVideos, publicItem, validId, MAX_ITEMS } from '../lib/store.js';
+import { readItems, writeItem, deleteUrls, orphanVideos, publicItem, validId, activeCount, MAX_ITEMS } from '../lib/store.js';
 
 // GET  /api/items   (x-passphrase or x-sync-token) -> { items: [...], max }
-// POST /api/items   (x-sync-token; "delete" also accepts x-passphrase)
+// POST /api/items   (x-sync-token; "done" also accepts x-passphrase)
 //   { action: "add",    id, title, caption, shopeeUrl, videoUrl, downloadUrl, sizeBytes }
 //   { action: "update", id, title?, caption?, shopeeUrl? }
-//   { action: "done",   id, done: true|false }   (also x-passphrase)
-//   { action: "delete", id }                     (also x-passphrase)
+//   { action: "done",   id, done: true|false }   (also x-passphrase) — done = "Already uploaded"
+//   { action: "delete", id }                     removes the video + record (Stitchify only)
+// MAX_ITEMS counts only the videos still waiting on the phone (not done).
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -18,8 +19,8 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
   const b = body(req);
-  // The phone (passphrase) may mark a video done or delete it; add/update stay Stitchify-only.
-  const allowed = b.action === 'delete' || b.action === 'done' ? isViewer(req) : isSync(req);
+  // The phone (passphrase) may only mark a video done; add/update/delete stay Stitchify-only.
+  const allowed = b.action === 'done' ? isViewer(req) : isSync(req);
   if (!allowed) return res.status(401).json({ error: 'bad_token' });
 
   if (!validId(b.id)) return res.status(400).json({ error: 'bad_id' });
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
 
   if (b.action === 'add') {
     if (existing) return res.status(409).json({ error: 'exists' });
-    if (items.length >= MAX_ITEMS) {
+    if (activeCount(items) >= MAX_ITEMS) {
       // The upload already happened — don't leave the video behind.
       await deleteUrls([b.videoUrl]);
       return res.status(409).json({ error: 'full', detail: `The site already holds ${MAX_ITEMS} videos.` });

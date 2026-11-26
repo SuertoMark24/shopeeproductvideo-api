@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 import { isSync } from '../lib/auth.js';
-import { readItems, MAX_ITEMS } from '../lib/store.js';
+import { readItems, activeCount, MAX_ITEMS } from '../lib/store.js';
 
 // POST /api/upload-token   (header x-sync-token)
 // -> { id, pathname, clientToken }
@@ -14,8 +14,8 @@ export default async function handler(req, res) {
   if (!isSync(req)) return res.status(401).json({ error: 'bad_token' });
 
   const items = await readItems();
-  if (items.length >= MAX_ITEMS) {
-    return res.status(409).json({ error: 'full', detail: `The site already holds ${MAX_ITEMS} videos. Delete one first.` });
+  if (activeCount(items) >= MAX_ITEMS) {
+    return res.status(409).json({ error: 'full', detail: `The phone already has ${MAX_ITEMS} videos waiting. Mark some Done first.` });
   }
 
   const id = randomBytes(8).toString('hex');
